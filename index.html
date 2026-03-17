@@ -955,6 +955,75 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'DM Sans',sans-seri
   color: rgba(168,240,198,.5);
   letter-spacing: .07em;
 }
+.time-lock-actions {
+  margin-top: 1rem;
+  height: 64px;
+  position: relative;
+}
+#prankOpenBtn {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  padding: .55rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.22);
+  background: linear-gradient(135deg, rgba(46,204,113,.2), rgba(255,255,255,.08));
+  color: #ecfff2;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: none;
+  transition: left .22s ease, top .22s ease, transform .22s ease, background .2s ease;
+}
+#prankOpenBtn:hover {
+  background: linear-gradient(135deg, rgba(46,204,113,.34), rgba(255,255,255,.15));
+}
+.time-lock-prank-note {
+  margin-top: .45rem;
+  font-size: .68rem;
+  color: rgba(200,255,220,.55);
+  letter-spacing: .06em;
+}
+#lockJumpScare {
+  position: fixed;
+  inset: 0;
+  z-index: 100001;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, rgba(255,255,255,.96) 0%, rgba(255,255,255,.9) 18%, rgba(160,0,0,.95) 100%);
+  color: #220000;
+  text-align: center;
+  pointer-events: none;
+  animation: lockScareShake .25s linear infinite;
+}
+#lockJumpScare.show {
+  display: flex;
+}
+.lock-jump-face {
+  font-size: clamp(4rem, 18vw, 10rem);
+  line-height: 1;
+  filter: drop-shadow(0 0 18px rgba(255,255,255,.65));
+}
+.lock-jump-text {
+  margin-top: .5rem;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.2rem, 5vw, 2.6rem);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(0,0,0,.65);
+}
+@keyframes lockScareShake {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-7px, 4px); }
+  40% { transform: translate(6px, -5px); }
+  60% { transform: translate(-5px, -3px); }
+  80% { transform: translate(4px, 5px); }
+  100% { transform: translate(0, 0); }
+}
 
 </style>
 </head>
@@ -966,6 +1035,16 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'DM Sans',sans-seri
     <div class="time-lock-date">23.03.2026</div>
     <div class="time-lock-countdown" id="timeLockCountdown">Checking date...</div>
     <div class="time-lock-note">It opens automatically on her birthday.</div>
+    <div class="time-lock-actions">
+      <button id="prankOpenBtn" type="button">Open it now</button>
+    </div>
+    <div class="time-lock-prank-note">Psst... try catching the button.</div>
+  </div>
+  <div id="lockJumpScare" aria-hidden="true">
+    <div>
+      <div class="lock-jump-face">👻</div>
+      <div class="lock-jump-text">BOO!</div>
+    </div>
   </div>
 </div>
 <div id="tapOverlay">
@@ -1956,11 +2035,14 @@ function startWishType(el){
 (function(){
   const lockOverlay = document.getElementById('timeLockOverlay');
   const countdownEl = document.getElementById('timeLockCountdown');
+  const prankBtn = document.getElementById('prankOpenBtn');
+  const jumpScareEl = document.getElementById('lockJumpScare');
   if(!lockOverlay || !countdownEl) return;
 
   // Month is 0-based in JS: 2 -> March
   const unlockDate = new Date(2026, 2, 23, 0, 0, 0, 0);
   let timer = null;
+  let prankClicks = 0;
 
   function formatCountdown(ms){
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -1974,6 +2056,61 @@ function startWishType(el){
   function unlockPage(){
     lockOverlay.classList.add('hidden');
     if(timer) clearInterval(timer);
+    if(jumpScareEl) jumpScareEl.classList.remove('show');
+  }
+
+  function playJumpSound(){
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(950, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1600, audioCtx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.45, audioCtx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.24);
+      setTimeout(() => audioCtx.close(), 280);
+    } catch(e) {
+      console.warn('Jump scare audio blocked:', e);
+    }
+  }
+
+  function movePrankButton(){
+    if(!prankBtn || !prankBtn.parentElement) return;
+    const area = prankBtn.parentElement;
+    const maxX = Math.max(10, area.clientWidth - prankBtn.offsetWidth - 10);
+    const maxY = Math.max(8, area.clientHeight - prankBtn.offsetHeight - 6);
+    const x = 8 + Math.random() * (maxX - 8);
+    const y = 2 + Math.random() * (maxY - 2);
+    prankBtn.style.left = `${x}px`;
+    prankBtn.style.top = `${y}px`;
+    prankBtn.style.transform = 'none';
+  }
+
+  function resetPrankButton(){
+    if(!prankBtn) return;
+    prankBtn.style.left = '50%';
+    prankBtn.style.top = '0';
+    prankBtn.style.transform = 'translateX(-50%)';
+    prankBtn.textContent = 'Open it now';
+  }
+
+  function triggerJumpScare(){
+    if(!jumpScareEl) return;
+    jumpScareEl.classList.add('show');
+    countdownEl.textContent = 'Nice try... still locked.';
+    playJumpSound();
+    setTimeout(() => {
+      jumpScareEl.classList.remove('show');
+      prankClicks = 0;
+      resetPrankButton();
+      tick();
+    }, 1200);
   }
 
   function tick(){
@@ -1989,6 +2126,18 @@ function startWishType(el){
   }
 
   tick();
+
+  if(prankBtn){
+    prankBtn.addEventListener('click', () => {
+      prankClicks += 1;
+      if(prankClicks <= 3){
+        prankBtn.textContent = `Catch me (${prankClicks}/3)`;
+        movePrankButton();
+        return;
+      }
+      triggerJumpScare();
+    });
+  }
 
   // Only keep lock active when needed
   if(!lockOverlay.classList.contains('hidden')){
